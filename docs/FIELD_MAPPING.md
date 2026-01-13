@@ -1,153 +1,216 @@
 # VendWeave Field Mapping Guide
 
-## সমস্যা
-
-তোমার Laravel project এ field নাম VendWeave এর expected field এর সাথে ১০০% match করবে না।
-
-| VendWeave Expected | তোমার Actual Example |
-| ------------------ | -------------------- |
-| total              | grand_total          |
-| payment_method     | pay_method           |
-| status             | order_status         |
-| trx_id             | transaction_ref      |
-
-এটা completely normal।
+যদি তোমার Laravel project এ database field names VendWeave এর expected names এর সাথে match না করে, এই guide follow করো।
 
 ---
 
-## Solution: Configurable Field Mapping
+## 🤔 সমস্যা কি?
 
-VendWeave package আসে built-in field mapping support সহ।
+তোমার Orders table এ field নাম আলাদা হতে পারে:
 
-### Step 1: config/vendweave.php publish করো
+| VendWeave Expected | তোমার Field Example             |
+| ------------------ | ------------------------------- |
+| `id`               | `order_id`                      |
+| `total`            | `grand_total`, `amount`         |
+| `payment_method`   | `pay_method`, `gateway`         |
+| `status`           | `order_status`, `state`         |
+| `trx_id`           | `transaction_ref`, `payment_id` |
+
+**এটা completely স্বাভাবিক!** VendWeave তোমার schema এর সাথে adapt করতে পারে।
+
+---
+
+## ✅ Solution: Field Mapping
+
+### Step 1: Config Publish করো
 
 ```bash
 php artisan vendor:publish --tag=vendweave-config
 ```
 
-### Step 2: Field Mapping Configure করো
+### Step 2: config/vendweave.php এ mapping configure করো
 
 ```php
 // config/vendweave.php
 
-'order_model' => App\Models\Sale::class,  // তোমার Order model
+// তোমার Order model class
+'order_model' => \App\Models\Order::class,
 
+// Field name mapping
 'order_mapping' => [
-    'id' => 'order_id',              // তোমার ID column
-    'amount' => 'grand_total',        // তোমার Amount column
-    'payment_method' => 'pay_method', // তোমার Payment method column
-    'status' => 'order_status',       // তোমার Status column
-    'trx_id' => 'transaction_ref',    // তোমার TRX ID column
+    'id' => 'order_id',            // তোমার ID column
+    'amount' => 'grand_total',      // তোমার total/amount column
+    'payment_method' => 'gateway',  // তোমার payment method column
+    'status' => 'order_status',     // তোমার status column
+    'trx_id' => 'transaction_ref',  // তোমার transaction ID column
 ],
 ```
 
 ---
 
-## Status Mapping
+## 📊 Status Value Mapping
 
-তোমার app এ status integer হতে পারে:
+তোমার app এ status integers বা enums হতে পারে:
 
-| Your App | VendWeave |
-| -------- | --------- |
-| 1        | paid      |
-| 2        | pending   |
-| 3        | failed    |
+| তোমার App             | VendWeave Status |
+| --------------------- | ---------------- |
+| `1` বা `'completed'`  | `paid`           |
+| `0` বা `'processing'` | `pending`        |
+| `2` বা `'cancelled'`  | `failed`         |
 
 Configure করো:
 
 ```php
+// config/vendweave.php
+
 'status_mapping' => [
-    'paid' => 1,      // confirmed হলে 1 set হবে
-    'pending' => 2,   // pending হলে 2
-    'failed' => 3,    // failed হলে 3
+    'paid' => 'completed',     // বা 1
+    'pending' => 'processing', // বা 0
+    'failed' => 'cancelled',   // বা 2
 ],
 ```
 
 ---
 
-## OrderAdapter Service ব্যবহার
+## 🔧 OrderAdapter Service ব্যবহার
+
+Package একটি `OrderAdapter` service দেয় যা mapping handle করে:
 
 ```php
 use VendWeave\Gateway\Services\OrderAdapter;
 
+// Get adapter instance
 $adapter = app(OrderAdapter::class);
 
 // Order খুঁজে বের করো
 $order = $adapter->findOrder($orderId);
 
-// Amount পড়ো (mapping অনুযায়ী)
-$amount = $adapter->getAmount($order);
+// Values পড়ো (mapping অনুযায়ী)
+$amount = $adapter->getAmount($order);        // grand_total পড়বে
+$method = $adapter->getPaymentMethod($order); // gateway পড়বে
+$trxId = $adapter->getTrxId($order);          // transaction_ref পড়বে
 
-// Payment method পড়ো
-$method = $adapter->getPaymentMethod($order);
-
-// Order paid করো
-$adapter->markAsPaid($order, 'TRX123XYZ');
-
-// Order failed করো
-$adapter->markAsFailed($order);
+// Order update করো
+$adapter->markAsPaid($order, 'TRX123XYZ');    // status='completed', trx='TRX123'
+$adapter->markAsFailed($order);                // status='cancelled'
 ```
 
 ---
 
-## Table Name Different হলে?
+## 📁 Different Table Name?
 
-Order table নাম হতে পারে:
+তোমার Orders table এর নাম হতে পারে:
 
 - `sales`
 - `customer_orders`
 - `shop_orders`
+- `transactions`
 
-Solution:
+**Solution:** Model class specify করো (table নয়):
 
 ```php
-'order_model' => App\Models\Sale::class,
+// config/vendweave.php
+
+'order_model' => \App\Models\Sale::class,
 ```
 
 Package Model ব্যবহার করে, Table নয়।
 
 ---
 
-## TRX ID Column নাই?
+## ❓ TRX ID Column নাই?
 
-যদি তোমার table এ trx_id column না থাকে:
+যদি তোমার table এ transaction ID column না থাকে:
 
-**Option 1:** Nullable column add করো
+### Option 1: Column Add করো (Recommended)
 
 ```bash
 php artisan make:migration add_trx_id_to_orders
 ```
 
 ```php
-Schema::table('orders', function (Blueprint $table) {
-    $table->string('trx_id')->nullable()->after('status');
-});
+// database/migrations/xxxx_add_trx_id_to_orders.php
+
+public function up(): void
+{
+    Schema::table('orders', function (Blueprint $table) {
+        $table->string('trx_id')->nullable()->after('status');
+    });
+}
 ```
 
-**Option 2:** Event listener দিয়ে handle করো
+```bash
+php artisan migrate
+```
+
+### Option 2: Separate Table এ Store করো
 
 ```php
-// Listen to PaymentVerified event
-// Store trx_id in separate table
+// app/Listeners/StoreTransactionId.php
+
+use VendWeave\Gateway\Events\PaymentVerified;
+
+class StoreTransactionId
+{
+    public function handle(PaymentVerified $event): void
+    {
+        PaymentTransaction::create([
+            'order_id' => $event->orderId,
+            'trx_id' => $event->getTrxId(),
+            'payment_method' => $event->getPaymentMethod(),
+        ]);
+    }
+}
 ```
 
 ---
 
-## Enterprise Benefits
+## 📋 Full Example Config
 
-✅ No forced schema change  
-✅ No breaking legacy system  
-✅ No DB migration needed  
-✅ No coupling  
-✅ Easy onboarding
+```php
+// config/vendweave.php
 
-এটাই exactly Stripe SDK, PayPal SDK যেভাবে কাজ করে।
+return [
+    // ... other config ...
+
+    'order_model' => \App\Models\Sale::class,
+
+    'order_mapping' => [
+        'id' => 'sale_id',
+        'amount' => 'grand_total',
+        'payment_method' => 'gateway',
+        'status' => 'sale_status',
+        'trx_id' => 'payment_reference',
+    ],
+
+    'status_mapping' => [
+        'paid' => 'completed',
+        'pending' => 'processing',
+        'failed' => 'cancelled',
+    ],
+];
+```
 
 ---
 
-## Summary
+## 🏆 Benefits
 
-তুমি তোমার system পরিবর্তন করবে না।  
+| Benefit             | Description                                      |
+| ------------------- | ------------------------------------------------ |
+| ✅ No Schema Change | তোমার existing DB structure পরিবর্তন করতে হবে না |
+| ✅ No Migration     | Legacy system এ কাজ করবে                         |
+| ✅ Flexible         | যেকোনো naming convention সাপোর্ট করে             |
+| ✅ Easy Onboarding  | কয়েক লাইন config এ setup                        |
+
+> 💡 এটাই exactly **Stripe SDK, PayPal SDK** যেভাবে কাজ করে।
+
+---
+
+## 📌 Summary
+
+```
+তুমি তোমার system পরিবর্তন করবে না।
 Package তোমার system এর সাথে adapt করবে।
+```
 
-**That's enterprise integration mindset.**
+**That's enterprise integration mindset.** 🚀
