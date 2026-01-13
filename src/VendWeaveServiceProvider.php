@@ -1,0 +1,154 @@
+<?php
+
+namespace VendWeave\Gateway;
+
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\ServiceProvider;
+use VendWeave\Gateway\Contracts\PaymentGatewayInterface;
+use VendWeave\Gateway\Services\OrderAdapter;
+use VendWeave\Gateway\Services\PaymentManager;
+use VendWeave\Gateway\Services\TransactionVerifier;
+use VendWeave\Gateway\Services\VendWeaveApiClient;
+
+class VendWeaveServiceProvider extends ServiceProvider
+{
+    /**
+     * Register any application services.
+     */
+    public function register(): void
+    {
+        $this->mergeConfigFrom(
+            __DIR__ . '/../config/vendweave.php',
+            'vendweave'
+        );
+
+        // Register API Client as singleton
+        $this->app->singleton(VendWeaveApiClient::class, function ($app) {
+            return new VendWeaveApiClient(
+                config('vendweave.endpoint'),
+                config('vendweave.api_key'),
+                config('vendweave.api_secret'),
+                config('vendweave.store_id')
+            );
+        });
+
+        // Register Transaction Verifier
+        $this->app->singleton(TransactionVerifier::class, function ($app) {
+            return new TransactionVerifier(
+                $app->make(VendWeaveApiClient::class)
+            );
+        });
+
+        // Register Payment Manager with interface binding
+        $this->app->singleton(PaymentGatewayInterface::class, function ($app) {
+            return new PaymentManager(
+                $app->make(TransactionVerifier::class)
+            );
+        });
+
+        // Register Order Adapter for flexible field mapping
+        $this->app->singleton(OrderAdapter::class, function ($app) {
+            return new OrderAdapter();
+        });
+
+        $this->app->alias(PaymentGatewayInterface::class, 'vendweave');
+    }
+
+    /**
+     * Bootstrap any application services.
+     */
+    public function boot(): void
+    {
+        $this->registerPublishables();
+        $this->registerRoutes();
+        $this->registerViews();
+        $this->registerRateLimiting();
+    }
+
+    /**
+     * Register publishable resources.
+     */
+    protected function registerPublishables(): void
+    {
+        if ($this->app->runningInConsole()) {
+            // Publish config
+            $this->publishes([
+                __DIR__ . '/../config/vendweave.php' => config_path('vendweave.php'),
+            ], 'vendweave-config');
+
+            // Publish views
+            $this->publishes([
+                __DIR__ . '/../resources/views' => resource_path('views/vendor/vendweave'),
+            ], 'vendweave-views');
+
+            // Publish all
+            $this->publishes([
+                __DIR__ . '/../config/vendweave.php' => config_path('vendweave.php'),
+                __DIR__ . '/../resources/views' => resource_path('views/vendor/vendweave'),
+            ], 'vendweave');
+        }
+    }
+
+    /**
+     * Register package routes.
+     */
+    protected function registerRoutes(): void
+    {
+        // Web routes
+        Route::group([
+            'prefix' => config('vendweave.routes.prefix', 'vendweave'),
+            'middleware' => config('vendweave.routes.middleware', ['web']),
+            'namespace' => 'VendWeave\\Gateway\\Http\\Controllers',
+        ], function () {
+            $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
+        });
+
+        // API routes
+        Route::group([
+            'prefix' => 'api/' . config('vendweave.routes.prefix', 'vendweave'),
+            'middleware' => config('vendweave.routes.api_middleware', ['api']),
+            'namespace' => 'VendWeave\\Gateway\\Http\\Controllers',
+        ], function () {
+            $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
+        });
+    }
+
+    /**
+     * Register package views.
+     */
+    protected function registerViews(): void
+    {
+        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'vendweave');
+    }
+
+    /**
+     * Register rate limiting for poll endpoint.
+     */
+    protected function registerRateLimiting(): void
+    {
+        $this->app->booted(function () {
+            $limiter = $this->app->make(\Illuminate\Cache\RateLimiter::class);
+
+            $limiter->for('vendweave-poll', function ($request) {
+                return \Illuminate\Cache\RateLimiting\Limit::perMinute(
+                    config('vendweave.rate_limit.max_attempts', 60)
+                )->by($request->ip() . '|' . $request->route('order'));
+            });
+        });
+    }
+
+    /**
+     * Get the services provided by the provider.
+     *
+     * @return array<int, string>
+     */
+    public function provides(): array
+    {
+        return [
+            'vendweave',
+            VendWeaveApiClient::class,
+            TransactionVerifier::class,
+            PaymentGatewayInterface::class,
+        ];
+    }
+}
