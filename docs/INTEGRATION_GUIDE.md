@@ -28,9 +28,11 @@ php artisan vendor:publish --tag=vendweave-config
 ```env
 VENDWEAVE_API_KEY=your_api_key
 VENDWEAVE_API_SECRET=your_api_secret
-VENDWEAVE_STORE_ID=your_store_id
-VENDWEAVE_API_ENDPOINT=https://pos.vendweave.com/api
+VENDWEAVE_STORE_SLUG=your_store_slug
+VENDWEAVE_API_ENDPOINT=https://vendweave.com/api
 ```
+
+> ⚠️ `store_slug` হচ্ছে তোমার store এর unique identifier (e.g., `my-shop`, `fashion-hub`)
 
 ---
 
@@ -175,8 +177,8 @@ if (VendWeaveHelper::isValidPaymentMethod('nagad')) {
 
 ## Testing
 
-Use sandbox endpoint for development:
+Production endpoint:
 
 ```env
-VENDWEAVE_API_ENDPOINT=https://sandbox.pos.vendweave.com/api
+VENDWEAVE_API_ENDPOINT=https://vendweave.com/api
 ```
