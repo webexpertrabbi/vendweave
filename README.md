@@ -92,6 +92,295 @@ return redirect()->route('vendweave.verify', ['order' => $order->id]);
 
 ---
 
+## 📖 সম্পূর্ণ ইন্টিগ্রেশন গাইড (A to Z)
+
+### ধাপ ১: প্যাকেজ ইনস্টল করুন
+
+```bash
+composer require vendweave/payment
+```
+
+### ধাপ ২: Config Publish করুন
+
+```bash
+php artisan vendor:publish --tag=vendweave-config
+```
+
+### ধাপ ৩: Environment Variables সেটআপ
+
+#### ৩.১ VendWeave Credentials নিন
+
+1. [VendWeave Dashboard](https://vendweave.com/dashboard) এ লগইন করুন
+2. **Settings** → **API Credentials** এ যান
+3. **"General API Credentials"** বা **"Website API Keys"** copy করুন
+
+> ⚠️ **সতর্কতা**: "Manual Payment API Keys" ব্যবহার করবেন না - সেগুলো Android app এর জন্য!
+
+#### ৩.২ `.env` ফাইলে যোগ করুন
+
+```env
+# VendWeave Payment Gateway
+VENDWEAVE_API_KEY=your_api_key_here
+VENDWEAVE_API_SECRET=your_api_secret_here
+VENDWEAVE_STORE_SLUG=your-store-slug
+VENDWEAVE_API_ENDPOINT=https://vendweave.com/api
+
+# Local development এ SSL error এড়াতে (Production এ false করবেন না!)
+VENDWEAVE_VERIFY_SSL=true
+```
+
+### ধাপ ৪: Database Migration চালান
+
+SDK এর নিজস্ব কোনো migration নেই, তবে আপনার `orders` table এ এই columns থাকতে হবে:
+
+```sql
+-- প্রয়োজনীয় columns (আপনার existing structure অনুযায়ী)
+id              -- Order ID
+total           -- মোট টাকা
+payment_method  -- bkash/nagad/rocket/upay
+status          -- pending/paid/failed
+trx_id          -- Transaction ID (nullable)
+```
+
+### ধাপ ৫: Order Model Configure করুন
+
+#### Option A: সরাসরি columns থাকলে
+
+যদি আপনার `orders` table এ সরাসরি `payment_method`, `total`, `trx_id` columns থাকে:
+
+```php
+// app/Models/Order.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Order extends Model
+{
+    protected $fillable = [
+        'total',
+        'payment_method',
+        'status',
+        'trx_id',
+        // ... অন্যান্য fields
+    ];
+}
+```
+
+#### Option B: Separate Payment Table থাকলে
+
+যদি payment data আলাদা `payments` table এ থাকে:
+
+```php
+// app/Models/Order.php
+class Order extends Model
+{
+    protected $fillable = ['total', 'status'];
+
+    // Payment relation
+    public function payment()
+    {
+        return $this->hasOne(Payment::class);
+    }
+
+    // ⚠️ গুরুত্বপূর্ণ: Eager load করুন
+    protected $with = ['payment'];
+
+    // Accessors for VendWeave
+    protected $appends = ['payment_method', 'trx_id'];
+
+    public function getPaymentMethodAttribute()
+    {
+        return $this->payment?->method ?? 'bkash';
+    }
+
+    public function getTrxIdAttribute()
+    {
+        return $this->payment?->transaction_id;
+    }
+}
+```
+
+### ধাপ ৬: Routes Configure করুন
+
+Routes already included হয়ে যাবে automatically। চেক করতে:
+
+```bash
+php artisan route:list --name=vendweave
+```
+
+**Available Routes:**
+
+- `GET /vendweave/verify/{order}` - Verification page
+- `GET /vendweave/poll/{order}` - Auto-polling endpoint
+- `GET /vendweave/success/{order}` - Success redirect
+- `GET /vendweave/failed/{order}` - Failed redirect
+- `GET /vendweave/cancel/{order}` - Cancel redirect
+
+### ধাপ ৭: Checkout Integration
+
+আপনার checkout controller এ:
+
+```php
+use Illuminate\Support\Facades\Session;
+
+public function checkout(Request $request)
+{
+    // 1. Order তৈরি করুন
+    $order = Order::create([
+        'user_id' => auth()->id(),
+        'total' => 500.00,
+        'status' => 'pending',
+        'payment_method' => $request->payment_method, // bkash/nagad/rocket/upay
+    ]);
+
+    // 2. Session এ order data store করুন
+    Session::put("vendweave_order_{$order->id}", [
+        'amount' => $order->total,
+        'payment_method' => $order->payment_method,
+    ]);
+
+    // 3. VendWeave verify page এ redirect করুন
+    return redirect()->route('vendweave.verify', ['order' => $order->id]);
+}
+```
+
+### ধাপ ৮: Success/Failed Handling
+
+#### Success Callback
+
+```php
+// app/Listeners/MarkOrderAsPaid.php
+namespace App\Listeners;
+
+use VendWeave\Gateway\Events\PaymentVerified;
+
+class MarkOrderAsPaid
+{
+    public function handle(PaymentVerified $event)
+    {
+        $order = $event->order;
+        $result = $event->verificationResult;
+
+        // Order status update করুন
+        $order->update([
+            'status' => 'paid',
+            'trx_id' => $result->getTransactionId(),
+        ]);
+
+        // অন্যান্য কাজ (email, notification, etc.)
+    }
+}
+```
+
+#### Failed Callback
+
+```php
+// app/Listeners/HandleFailedPayment.php
+use VendWeave\Gateway\Events\PaymentFailed;
+
+class HandleFailedPayment
+{
+    public function handle(PaymentFailed $event)
+    {
+        $order = $event->order;
+
+        $order->update(['status' => 'failed']);
+
+        // Log করুন বা user কে notify করুন
+    }
+}
+```
+
+#### Event Register করুন
+
+```php
+// app/Providers/EventServiceProvider.php
+use VendWeave\Gateway\Events\PaymentVerified;
+use VendWeave\Gateway\Events\PaymentFailed;
+
+protected $listen = [
+    PaymentVerified::class => [
+        \App\Listeners\MarkOrderAsPaid::class,
+    ],
+    PaymentFailed::class => [
+        \App\Listeners\HandleFailedPayment::class,
+    ],
+];
+```
+
+### ধাপ ৯: Testing
+
+#### Local Development এ Test করুন
+
+```bash
+# Server চালান
+php artisan serve
+
+# Browser এ যান
+http://127.0.0.1:8000/vendweave/verify/1
+```
+
+#### Test Checklist
+
+- [ ] Verify page load হচ্ছে কি?
+- [ ] Auto-polling কাজ করছে কি? (Console দেখুন)
+- [ ] Payment করার পর status update হচ্ছে কি?
+- [ ] Success page এ redirect হচ্ছে কি?
+
+### ধাপ ১০: Troubleshooting
+
+#### SSL Certificate Error (Local Development)
+
+```env
+# .env তে যোগ করুন
+VENDWEAVE_VERIFY_SSL=false
+```
+
+তারপর:
+
+```bash
+php artisan config:clear
+```
+
+#### Payment Method Mismatch Error
+
+**সমস্যা:** Order model থেকে `payment_method` পাচ্ছে না।
+
+**সমাধান:** Order model এ accessor যোগ করুন (ধাপ ৫ দেখুন)।
+
+#### 422 Validation Error
+
+**সমস্যা:** POS API তে wrong parameters পাঠাচ্ছে।
+
+**সমাধান:** SDK automatically map করে! শুধু config cache clear করুন:
+
+```bash
+php artisan config:clear
+```
+
+#### 401 Unauthorized Error
+
+**সমস্যা:** ভুল API credentials ব্যবহার করছেন।
+
+**সমাধান:** নিশ্চিত করুন "General API Credentials" ব্যবহার করছেন, "Manual Payment API Keys" নয়।
+
+---
+
+## 🎯 Production Deployment Checklist
+
+Production এ deploy করার আগে:
+
+- [ ] `VENDWEAVE_VERIFY_SSL=true` set করুন
+- [ ] সঠিক API credentials ব্যবহার করছেন
+- [ ] `APP_ENV=production` এবং `APP_DEBUG=false`
+- [ ] Config cache করুন: `php artisan config:cache`
+- [ ] Route cache করুন: `php artisan route:cache`
+- [ ] Events properly registered আছে
+- [ ] Database indexes আছে `orders` table এ
+- [ ] Logging enable আছে errors track করতে
+
+---
+
 ## 🏗 Architecture
 
 ```
