@@ -235,4 +235,64 @@ return [
         'amount' => ['expected_amount', 'amount', 'total', 'grand_total'],
         'store_slug' => ['store_slug', 'store_id', 'shop_slug'],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Intelligent Amount Detection
+    |--------------------------------------------------------------------------
+    |
+    | The SDK intelligently detects the actual payable amount (grand total)
+    | using mathematical validation and priority-based field detection.
+    |
+    | Philosophy: SDK detects money logically, not linguistically.
+    |
+    | Strategy:
+    | 1. Priority-based candidate detection
+    | 2. Mathematical validation (subtotal - discount + shipping = payable)
+    | 3. Conflict resolution when names are ambiguous
+    |
+    */
+
+    'amount_detection' => [
+        /*
+        | Primary Fields (assumed to be final payable amount)
+        | These are checked first and preferred over secondary fields.
+        */
+        'primary_fields' => [
+            'expected_amount',
+            'payable_amount',
+            'final_amount',
+            'grand_total',
+            'total_amount',
+            'order_total_amount',
+        ],
+
+        /*
+        | Secondary Fields (might be subtotal, used as fallback)
+        | Only used if no primary fields exist.
+        */
+        'secondary_fields' => [
+            'total',
+            'subtotal',
+            'product_total',
+        ],
+
+        /*
+        | Mathematical Validation
+        | If these component fields exist, SDK will calculate and validate.
+        */
+        'enable_math_validation' => true,
+
+        /*
+        | Component Field Names
+        | Used for mathematical validation: subtotal - discount + shipping + tax
+        */
+        'component_fields' => [
+            'subtotal' => ['subtotal', 'sub_total', 'items_total'],
+            'discount' => ['discount', 'discount_amount', 'coupon_discount'],
+            'shipping' => ['shipping', 'shipping_cost', 'shipping_amount'],
+            'tax' => ['tax', 'tax_amount', 'vat'],
+        ],
+    ],
 ];
+

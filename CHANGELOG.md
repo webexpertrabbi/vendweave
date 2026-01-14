@@ -2,8 +2,68 @@
 
 All notable changes to the VendWeave Payment SDK will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangeled.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [1.2.0] - 2026-01-14
+
+### 🧠 Intelligent Amount Detection
+
+**Philosophy**: SDK detects money logically, not linguistically.
+
+This release adds intelligent payable amount detection that uses mathematical validation instead of blindly trusting field names.
+
+### ✨ Added
+
+- **AmountDetectionService** - New service for intelligent amount detection
+
+  - Priority-based field detection (expected_amount, grand_total, etc.)
+  - Mathematical validation: `subtotal - discount + shipping + tax = payable`
+  - Conflict resolution when multiple amount fields exist
+  - Graceful fallback with warning logging
+
+- **Three-Tier Detection Strategy**:
+
+  1. **Priority Detection**: Checks primary fields (expected_amount, payable_amount, final_amount, grand_total) before secondary fields (total, subtotal)
+  2. **Mathematical Validation**: If component fields exist (subtotal, discount, shipping, tax), SDK calculates and validates against candidates
+  3. **Conflict Resolution**: When ambiguous, selects highest primary field and logs warning
+
+- **Configuration** (`config/vendweave.php`):
+  ```php
+  'amount_detection' => [
+      'primary_fields' => ['expected_amount', 'payable_amount', 'final_amount', 'grand_total', ...],
+      'secondary_fields' => ['total', 'subtotal', 'product_total'],
+      'enable_math_validation' => true,
+      'component_fields' => [...]
+  ],
+  ```
+
+### 🔄 Changed
+
+- **OrderAdapter.getAmount()** now uses intelligent detection instead of simple field lookup
+- SDK automatically detects actual payable amount even when:
+  - Field names are swapped (total vs grand_total)
+  - Multiple amount fields exist
+  - Coupon/discount/shipping exists
+  - Field meanings are ambiguous
+
+### 💡 Benefits
+
+- **Prevents Payment Errors**: No more underpayment due to wrong field detection
+- **Works with Any Schema**: Adapts to user's field naming conventions
+- **Self-Validating**: Mathematical checks ensure correctness
+- **Transparent**: Logs ambiguities for debugging
+
+### Example Scenarios Handled
+
+| Scenario                               | SDK Behavior                                                          |
+| -------------------------------------- | --------------------------------------------------------------------- |
+| Both `total` & `grand_total` exist     | Validates mathematically or chooses higher value                      |
+| Only `subtotal` exists                 | Uses it as payable amount                                             |
+| Has `subtotal`, `discount`, `shipping` | Calculates: `subtotal - discount + shipping` and finds matching field |
+| Ambiguous field names                  | Selects best candidate + logs warning                                 |
 
 ---
 

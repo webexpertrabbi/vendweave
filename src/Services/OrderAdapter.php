@@ -30,7 +30,12 @@ class OrderAdapter
      */
     protected string $modelClass;
 
-    public function __construct()
+    /**
+     * Amount detection service.
+     */
+    protected AmountDetectionService $amountDetector;
+
+    public function __construct(AmountDetectionService $amountDetector = null)
     {
         $this->fieldMap = config('vendweave.order_mapping', [
             'id' => 'id',
@@ -47,6 +52,9 @@ class OrderAdapter
         ]);
 
         $this->modelClass = config('vendweave.order_model', 'App\\Models\\Order');
+        
+        // Initialize amount detector
+        $this->amountDetector = $amountDetector ?? new AmountDetectionService();
     }
 
     /**
@@ -88,14 +96,23 @@ class OrderAdapter
     }
 
     /**
-     * Get the amount from order.
+     * Get the amount from order using intelligent detection.
+     * 
+     * This method uses AmountDetectionService to intelligently detect
+     * the actual payable amount (grand total) using:
+     * - Priority-based field detection
+     * - Mathematical validation (subtotal - discount + shipping)
+     * - Conflict resolution
+     * 
+     * SDK detects money logically, not linguistically.
      *
      * @param Model $order
      * @return float
      */
     public function getAmount(Model $order): float
     {
-        return (float) $this->getValue($order, 'amount');
+        // Use intelligent detection instead of blind field lookup
+        return $this->amountDetector->extractAmount($order);
     }
 
     /**
