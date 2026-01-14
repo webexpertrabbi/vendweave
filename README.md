@@ -234,6 +234,62 @@ protected $listen = [
 
 ---
 
+## 🔄 প্যাকেজ আপডেট করার নিয়ম
+
+### নতুন ইনস্টলেশন
+
+```bash
+composer require vendweave/payment
+```
+
+### আগের ভার্সন থেকে আপডেট
+
+#### v1.0.0/v1.1.0 থেকে v1.2.0 এ আপডেট:
+
+```bash
+# আগের ভার্সন থাকলে আপডেট করুন
+composer update vendweave/payment
+
+# Config ফাইল রিফ্রেশ করুন (নতুন options পেতে)
+php artisan vendor:publish --tag=vendweave-config --force
+
+# Config cache ক্লিয়ার করুন
+php artisan config:clear
+```
+
+#### পুরাতন `vendweave/gateway` থেকে মাইগ্রেশন:
+
+```bash
+# পুরাতন প্যাকেজ রিমুভ করুন
+composer remove vendweave/gateway
+
+# নতুন প্যাকেজ ইনস্টল করুন
+composer require vendweave/payment
+
+# Config পুনরায় publish করুন
+php artisan vendor:publish --tag=vendweave-config --force
+
+# Cache ক্লিয়ার করুন
+php artisan config:clear
+php artisan cache:clear
+```
+
+### ভার্সন চেক করা
+
+```bash
+composer show vendweave/payment
+```
+
+### সর্বশেষ ভার্সন পেতে
+
+```bash
+composer update vendweave/payment --with-dependencies
+```
+
+> 💡 **Tip**: প্রতিটি আপডেটের পর [CHANGELOG.md](CHANGELOG.md) দেখুন নতুন features ও breaking changes জানতে।
+
+---
+
 ## ✅ Production Status
 
 | Item            | Status               |
