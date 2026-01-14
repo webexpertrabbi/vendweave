@@ -3,7 +3,7 @@
 The official, production-ready Laravel SDK for the VendWeave POS Manual Payment Gateway. Seamlessly verify bKash, Nagad, Rocket, and Upay transactions by syncing directly with your VendWeave POS store.
 
 [![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](COMPOSER.json)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ---
 
