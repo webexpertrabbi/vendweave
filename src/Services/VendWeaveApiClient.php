@@ -39,11 +39,15 @@ class VendWeaveApiClient
         $this->apiSecret = $apiSecret;
         $this->storeSlug = $storeSlug;
 
+        // SSL verification - can be disabled for local development
+        $verifySsl = config('vendweave.verify_ssl', true);
+
         $this->client = new Client([
             'base_uri' => $this->endpoint,
             'timeout' => 30,
             'connect_timeout' => 10,
             'http_errors' => false,
+            'verify' => $verifySsl,
         ]);
     }
 

@@ -51,6 +51,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | SSL Verification
+    |--------------------------------------------------------------------------
+    |
+    | Enable/disable SSL certificate verification. Set to false ONLY for
+    | local development if you encounter SSL certificate errors.
+    |
+    | ⚠️ WARNING: Never disable SSL verification in production!
+    |
+    */
+
+    'verify_ssl' => env('VENDWEAVE_VERIFY_SSL', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | Polling Configuration
     |--------------------------------------------------------------------------
     |
