@@ -366,28 +366,36 @@ php artisan config:clear
 
 ---
 
-### ধাপ ১১: Payment Numbers & Instructions কনফিগার করুন
+### ধাপ ১১: পেমেন্ট নাম্বার এবং ইন্সট্রাকশন সেটআপ (Payment Numbers)
 
-`config/vendweave.php` ফাইলে `payment_methods` সেকশনে আপনার নাম্বার এবং ইন্সট্রাকশন সেট করুন:
+আপনি আপনার বিকাশ, নগদ, রকেট এবং উপায় নাম্বারগুলো `.env` ফাইলে সেট করতে পারেন। এগুলো অটোমেটিক পেমেন্ট ভেরিফাই পেজে দেখাবে।
+
+#### ১. `.env` ফাইলে নাম্বার যোগ করুন:
+
+```env
+# Payment Numbers
+VENDWEAVE_BKASH_NUMBER="017XXXXXXXX"
+VENDWEAVE_NAGAD_NUMBER="018XXXXXXXX"
+VENDWEAVE_ROCKET_NUMBER="019XXXXXXXX"
+VENDWEAVE_UPAY_NUMBER="016XXXXXXXX"
+```
+
+#### ২. কাস্টম ইন্সট্রাকশন বা টাইপ পরিবর্তন (ঐচ্ছিক):
+
+যদি আপনি "Personal" এর বদলে "Merchant" বা লেখা পরিবর্তন করতে চান, তাহলে `config/vendweave.php` ফাইলটি ওপেন করুন এবং Edit করুন:
 
 ```php
 'payment_methods' => [
     'bkash' => [
         'number' => env('VENDWEAVE_BKASH_NUMBER', '01XXXXXXXXX'),
-        'type' => 'personal',
-        'instruction' => 'এই নাম্বারে টাকা পাঠিয়ে ভেরিফাই করুন।',
+        'type' => 'merchant', // 'personal' পরিবর্তন করে 'merchant' দিন
+        'instruction' => 'বিকাশ পেমেন্ট অপশন থেকে পেমেন্ট করুন।', // আপনার বাংলা লেখা এখানে দিন
     ],
     // ... অন্যান্য মেথড
 ],
 ```
 
-এবং `.env` ফাইলে নাম্বারগুলো সেট করুন:
-
-```env
-VENDWEAVE_BKASH_NUMBER=01700000000
-VENDWEAVE_NAGAD_NUMBER=01600000000
-VENDWEAVE_U_PAY_NUMBER=01800000000
-```
+> **নোট:** কনফিগ ফাইলে পরিবর্তন করলে অবশ্যই `php artisan config:clear` কমান্ড দিবেন।
 
 Production এ deploy করার আগে:
 
